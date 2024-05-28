@@ -1,7 +1,14 @@
 use embedded_io_async::{Read, Write};
 use log::debug;
 
-use self::config::Config;
+mod constants;
+pub use constants::*;
+
+mod error;
+pub use error::*;
+
+mod config;
+pub use config::*;
 
 pub struct Sds011<Serial> {
     serial: Serial,
@@ -11,61 +18,6 @@ pub struct Sds011<Serial> {
 pub struct Sds011Data {
     pub pm2_5: f32,
     pub pm10: f32,
-}
-
-#[derive(Debug)]
-pub enum Error {
-    EmptyDataFrame,
-    BadChecksum,
-    InvalidFrame,
-    ReadFailure,
-}
-
-const HEAD: u8 = 0xAA;
-const TAIL: u8 = 0xAB;
-const COMMAND_ID: u8 = 0xB4;
-
-pub mod config {
-    #[derive(PartialEq, Eq, Copy, Clone, Debug)]
-    pub enum DeviceMode {
-        Active,
-        Passive,
-    }
-
-    #[derive(PartialEq, Eq, Copy, Clone, Debug)]
-    pub struct DeviceID {
-        pub id1: u8,
-        pub id2: u8,
-    }
-
-    #[derive(Debug, Copy, Clone)]
-    pub struct Config {
-        pub id: DeviceID,
-        pub mode: DeviceMode,
-    }
-
-    impl Config {
-        pub fn id(mut self, id: DeviceID) -> Self {
-            self.id = id;
-            self
-        }
-        pub fn mode(mut self, mode: DeviceMode) -> Self {
-            self.mode = mode;
-            self
-        }
-    }
-
-    impl Default for Config {
-        fn default() -> Config {
-            Config {
-                id: DeviceID {
-                    id1: 0xff,
-                    id2: 0xff,
-                },
-                mode: DeviceMode::Passive,
-            }
-        }
-    }
 }
 
 impl<S> Sds011<S>
@@ -81,7 +33,7 @@ where
 
         self.set_reporting_mode(false).await?;
 
-        if self.config.mode == config::DeviceMode::Passive {
+        if self.config.mode == DeviceMode::Passive {
             self.set_state(false, true).await?;
         } else {
             self.set_working_period(false, 0x00).await?;
@@ -173,7 +125,7 @@ where
         command[3] = if query { 0x00 } else { 0x01 };
 
         // report active or passive mode
-        command[4] = if self.config.mode == config::DeviceMode::Active {
+        command[4] = if self.config.mode == DeviceMode::Active {
             0x00
         } else {
             0x01

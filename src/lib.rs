@@ -1,3 +1,5 @@
+#![cfg_attr(not(test), no_std)]
+
 use embedded_io_async::{Read, Write};
 use log::debug;
 

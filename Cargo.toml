@@ -2,23 +2,14 @@
 name = "sds011-nostd-rs"
 version = "0.1.0"
 authors = ["Etienne Tremel <995474+etiennetremel@users.noreply.github.com>"]
-edition = "2021"
+edition = "2024"
 license = "MIT"
-description = "An async library to interact with the SDS011 sensor using UART protocol"
+description = "An nostd async library to interact with the SDS011 sensor using UART protocol"
 homepage = "https://github.com/etiennetremel/sds011-nostd-rs"
 repository = "https://github.com/etiennetremel/sds011-nostd-rs"
 rust-version = "1.77"
-keywords = [
-    "async",
-    "embedded-io",
-    "sds011",
-    "sensor",
-    "uart",
-]
-categories = [
-    "embedded",
-    "no-std",
-]
+keywords = ["async", "embedded-io", "sds011", "sensor", "uart"]
+categories = ["embedded", "no-std"]
 publish = true
 
 [dependencies]

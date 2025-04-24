@@ -41,6 +41,11 @@ let sample = sds011.read_sample().await.unwrap();
 println!("PM2.5: {} µg/m³, PM10: {} µg/m³", sample.pm2_5, sample.pm10);
 ```
 
+## Example
+
+Example implementation of this library on a esp32 chip can be found in the
+[etiennetremel/esp32-home-sensor][esp32-home-sensor] repository.
+
 ## References
 
 - [SDS011 Control Protocol][control-protocol]
@@ -49,3 +54,4 @@ println!("PM2.5: {} µg/m³, PM10: {} µg/m³", sample.pm2_5, sample.pm10);
 <!-- page links-->
 
 [control-protocol]: https://cdn.sparkfun.com/assets/parts/1/2/2/7/5/Laser_Dust_Sensor_Control_Protocol_V1.3.pdf
+[esp32-home-sensor]: https://github.com/etiennetremel/esp32-home-sensor

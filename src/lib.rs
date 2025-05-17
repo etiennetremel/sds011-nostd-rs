@@ -626,3 +626,273 @@ where
         Some(Sds011Data { pm2_5, pm10 })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*; // Make Sds011, Config, etc. available
+    use embedded_io_async::{Error, ErrorKind, ErrorType};
+    use embedded_io_async::{Read, Write};
+    use futures_executor::block_on; // For running async tests
+
+    // A mock serial port for testing
+    #[derive(Debug, Default)]
+    struct MockSerial {
+        write_buffer: Vec<u8>, // Stores bytes written to the mock serial
+        read_buffer: Vec<u8>,  // Bytes to be returned by read operations
+        read_pos: usize,       // Current position in the read_buffer
+        // expect_flush: bool,    // Whether a flush is expected
+        flush_called: bool, // Whether flush was called
+        fail_write: bool,   // Simulate write failure
+        fail_read: bool,    // Simulate read failure
+        fail_flush: bool,   // Simulate flush failure
+    }
+
+    impl MockSerial {
+        fn new(read_data: Vec<u8>) -> Self {
+            MockSerial {
+                write_buffer: Vec::new(),
+                read_buffer: read_data,
+                read_pos: 0,
+                // expect_flush: false,
+                flush_called: false,
+                fail_write: false,
+                fail_read: false,
+                fail_flush: false,
+            }
+        }
+
+        // Helper to set expected data to be read by the SUT
+        fn set_read_data(&mut self, data: Vec<u8>) {
+            self.read_buffer = data;
+            self.read_pos = 0;
+        }
+
+        // Helper to get bytes written by the SUT
+        fn get_written_data(&self) -> &[u8] {
+            &self.write_buffer
+        }
+    }
+
+    impl Read for MockSerial {
+        async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+            if self.fail_read {
+                return Err(DummyError); // Simulate read error
+            }
+            // Simulate reading one frame (10 bytes) or less at a time,
+            // or whatever is smaller: buf.len(), 10 bytes, or remaining data.
+            let max_bytes_for_this_call = core::cmp::min(buf.len(), 10);
+            let bytes_available_in_mock = self.read_buffer.len() - self.read_pos;
+            let bytes_to_read = core::cmp::min(max_bytes_for_this_call, bytes_available_in_mock);
+
+            if bytes_to_read > 0 {
+                buf[..bytes_to_read].copy_from_slice(
+                    &self.read_buffer[self.read_pos..self.read_pos + bytes_to_read],
+                );
+                self.read_pos += bytes_to_read;
+                Ok(bytes_to_read)
+            } else {
+                // If read_pos is at the end of read_buffer, it means no more data.
+                // If buf.len() was 0, this is also Ok(0).
+                Ok(0)
+            }
+        }
+    }
+
+    impl Write for MockSerial {
+        async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+            if self.fail_write {
+                return Err(DummyError); // Simulate write error
+            }
+            self.write_buffer.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        async fn flush(&mut self) -> Result<(), Self::Error> {
+            if self.fail_flush {
+                return Err(DummyError); // Simulate flush error
+            }
+            self.flush_called = true;
+            Ok(())
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    pub struct DummyError;
+
+    impl Error for DummyError {
+        fn kind(&self) -> ErrorKind {
+            ErrorKind::Other
+        }
+    }
+
+    // implement ErrorType
+    impl ErrorType for MockSerial {
+        type Error = DummyError;
+    }
+
+    // Helper to create a default config for tests
+    fn default_config() -> Config {
+        Config::new(DeviceID::default(), DeviceMode::Passive)
+    }
+
+    #[test]
+    fn test_sds011_new() {
+        let mock_serial = MockSerial::new(vec![]);
+        let config = default_config();
+        let sensor = Sds011::new(mock_serial, config);
+        assert_eq!(sensor.config, config);
+        // Check if mock_serial was moved correctly (cannot be accessed here if moved)
+    }
+
+    // Helper to calculate checksum for a command slice (excluding head, tail, and checksum byte itself)
+    fn calculate_checksum(command_payload: &[u8]) -> u8 {
+        command_payload
+            .iter()
+            .fold(0u8, |sum, &b| sum.wrapping_add(b))
+    }
+
+    #[test]
+    fn test_init_passive_mode() {
+        let mut mock_serial = MockSerial::new(vec![]);
+        // Expected reply for set_reporting_mode_cmd (passive)
+        // HEAD, REPLY_ID, CMD_SET_REPORTING_MODE, 0x01 (Set), 0x01 (Passive), 0,0,0, CHECKSUM, TAIL
+        let reply_set_mode = vec![
+            HEAD,
+            REPLY_ID,
+            0x02,
+            0x01,
+            0x01,
+            0,
+            0,
+            0,
+            (0x02 + 0x01 + 0x01),
+            TAIL,
+        ];
+        // Expected reply for set_operational_state (sleep)
+        // HEAD, REPLY_ID, CMD_SET_STATE, 0x01 (Set), 0x00 (Sleep), 0,0,0, CHECKSUM, TAIL
+        let reply_set_sleep = vec![
+            HEAD,
+            REPLY_ID,
+            0x06,
+            0x01,
+            0x00,
+            0,
+            0,
+            0,
+            (0x06 + 0x01 + 0x00),
+            TAIL,
+        ];
+
+        mock_serial.set_read_data([reply_set_mode, reply_set_sleep].concat());
+
+        let config = Config::new(DeviceID::default(), DeviceMode::Passive);
+        let mut sensor = Sds011::new(mock_serial, config);
+
+        let result = block_on(sensor.init());
+        assert!(result.is_ok(), "init failed: {:?}", result.err());
+
+        let written_data = sensor.serial.get_written_data();
+        assert!(
+            written_data.len() >= 38,
+            "Expected at least two 19-byte commands"
+        ); // 2 commands
+
+        // Command 1: Set Reporting Mode to Passive
+        // HEAD, CMD_ID, 0x02, 0x01, 0x01 (Passive), ..., ID1, ID2, CHECKSUM, TAIL
+        let cmd1 = &written_data[0..19];
+        assert_eq!(cmd1[0], HEAD);
+        assert_eq!(cmd1[1], COMMAND_ID);
+        assert_eq!(cmd1[2], 0x02); // Reporting mode command
+        assert_eq!(cmd1[3], 0x01); // Set
+        assert_eq!(cmd1[4], 0x01); // Passive
+        assert_eq!(cmd1[15], DeviceID::default().id1);
+        assert_eq!(cmd1[16], DeviceID::default().id2);
+        let checksum1 = calculate_checksum(&cmd1[2..=16]);
+        assert_eq!(cmd1[17], checksum1);
+        assert_eq!(cmd1[18], TAIL);
+
+        // Command 2: Set Operational State to Sleeping
+        // HEAD, CMD_ID, 0x06, 0x01, 0x00 (Sleep), ..., ID1, ID2, CHECKSUM, TAIL
+        let cmd2 = &written_data[19..38];
+        assert_eq!(cmd2[0], HEAD);
+        assert_eq!(cmd2[1], COMMAND_ID);
+        assert_eq!(cmd2[2], 0x06); // Set state command
+        assert_eq!(cmd2[3], 0x01); // Set
+        assert_eq!(cmd2[4], 0x00); // Sleep
+        assert_eq!(cmd2[15], DeviceID::default().id1);
+        assert_eq!(cmd2[16], DeviceID::default().id2);
+        let checksum2 = calculate_checksum(&cmd2[2..=16]);
+        assert_eq!(cmd2[17], checksum2);
+        assert_eq!(cmd2[18], TAIL);
+
+        assert!(sensor.serial.flush_called);
+    }
+
+    #[test]
+    fn test_init_active_mode() {
+        let mut mock_serial = MockSerial::new(vec![]);
+        // Expected reply for set_reporting_mode_cmd (active)
+        let reply_set_mode = vec![
+            HEAD,
+            REPLY_ID,
+            0x02,
+            0x01,
+            0x00,
+            0,
+            0,
+            0,
+            (0x02 + 0x01 + 0x00),
+            TAIL,
+        ];
+        // Expected reply for set_working_period (continuous)
+        let reply_set_period = vec![
+            HEAD,
+            REPLY_ID,
+            0x08,
+            0x01,
+            0x00,
+            0,
+            0,
+            0,
+            (0x08 + 0x01 + 0x00),
+            TAIL,
+        ];
+        mock_serial.set_read_data([reply_set_mode, reply_set_period].concat());
+
+        let config = Config::new(DeviceID::default(), DeviceMode::Active);
+        let mut sensor = Sds011::new(mock_serial, config);
+
+        let result = block_on(sensor.init());
+        assert!(result.is_ok(), "init failed: {:?}", result.err());
+
+        let written_data = sensor.serial.get_written_data();
+        assert!(
+            written_data.len() >= 38,
+            "Expected at least two 19-byte commands"
+        );
+
+        // Command 1: Set Reporting Mode to Active
+        let cmd1 = &written_data[0..19];
+        assert_eq!(cmd1[0], HEAD);
+        assert_eq!(cmd1[1], COMMAND_ID);
+        assert_eq!(cmd1[2], 0x02); // Reporting mode command
+        assert_eq!(cmd1[3], 0x01); // Set
+        assert_eq!(cmd1[4], 0x00); // Active
+        let checksum1 = calculate_checksum(&cmd1[2..=16]);
+        assert_eq!(cmd1[17], checksum1);
+        assert_eq!(cmd1[18], TAIL);
+
+        // Command 2: Set Working Period to Continuous (0)
+        let cmd2 = &written_data[19..38];
+        assert_eq!(cmd2[0], HEAD);
+        assert_eq!(cmd2[1], COMMAND_ID);
+        assert_eq!(cmd2[2], 0x08); // Set working period command
+        assert_eq!(cmd2[3], 0x01); // Set
+        assert_eq!(cmd2[4], 0x00); // Continuous
+        let checksum2 = calculate_checksum(&cmd2[2..=16]);
+        assert_eq!(cmd2[17], checksum2);
+        assert_eq!(cmd2[18], TAIL);
+
+        assert!(sensor.serial.flush_called);
+    }
+}

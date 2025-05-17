@@ -14,3 +14,6 @@ publish = true
 [dependencies]
 embedded-io-async = "0.6"
 log = "0.4"
+
+[dev-dependencies]
+futures-executor = "0.3.31"

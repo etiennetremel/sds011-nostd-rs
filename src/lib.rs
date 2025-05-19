@@ -4,7 +4,7 @@ use embedded_io_async::{Read, Write};
 use log::debug;
 
 mod constants;
-pub use constants::*;
+use constants::*;
 
 mod error;
 pub use error::*;
@@ -640,11 +640,10 @@ mod tests {
         write_buffer: Vec<u8>, // Stores bytes written to the mock serial
         read_buffer: Vec<u8>,  // Bytes to be returned by read operations
         read_pos: usize,       // Current position in the read_buffer
-        // expect_flush: bool,    // Whether a flush is expected
-        flush_called: bool, // Whether flush was called
-        fail_write: bool,   // Simulate write failure
-        fail_read: bool,    // Simulate read failure
-        fail_flush: bool,   // Simulate flush failure
+        flush_called: bool,    // Whether flush was called
+        fail_write: bool,      // Simulate write failure
+        fail_read: bool,       // Simulate read failure
+        fail_flush: bool,      // Simulate flush failure
     }
 
     impl MockSerial {
@@ -653,7 +652,6 @@ mod tests {
                 write_buffer: Vec::new(),
                 read_buffer: read_data,
                 read_pos: 0,
-                // expect_flush: false,
                 flush_called: false,
                 fail_write: false,
                 fail_read: false,
@@ -741,7 +739,6 @@ mod tests {
         let config = default_config();
         let sensor = Sds011::new(mock_serial, config);
         assert_eq!(sensor.config, config);
-        // Check if mock_serial was moved correctly (cannot be accessed here if moved)
     }
 
     // Helper to calculate checksum for a command slice (excluding head, tail, and checksum byte itself)
@@ -796,7 +793,7 @@ mod tests {
         assert!(
             written_data.len() >= 38,
             "Expected at least two 19-byte commands"
-        ); // 2 commands
+        );
 
         // Command 1: Set Reporting Mode to Passive
         // HEAD, CMD_ID, 0x02, 0x01, 0x01 (Passive), ..., ID1, ID2, CHECKSUM, TAIL

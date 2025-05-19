@@ -779,6 +779,7 @@ mod tests {
             0,
             0,
             0,
+            #[allow(clippy::identity_op)]
             (0x06 + 0x01 + 0x00),
             TAIL,
         ];
@@ -841,6 +842,7 @@ mod tests {
             0,
             0,
             0,
+            #[allow(clippy::identity_op)]
             (0x02 + 0x01 + 0x00),
             TAIL,
         ];
@@ -854,6 +856,7 @@ mod tests {
             0,
             0,
             0,
+            #[allow(clippy::identity_op)]
             (0x08 + 0x01 + 0x00),
             TAIL,
         ];

@@ -1,0 +1,41 @@
+name: Pull request
+
+on:
+  push:
+    pull_request:
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D clippy::all
+
+  cargo-fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run cargo fmt
+        run: cargo fmt --check
+
+  cargo-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run cargo doc
+        run: RUSTDOCFLAGS="-D warnings" cargo doc
+
+  test:
+    needs:
+      - clippy
+      - cargo-fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run cargo check
+        run: cargo check
+      - name: Run cargo test
+        run: cargo test

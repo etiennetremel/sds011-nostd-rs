@@ -717,6 +717,14 @@ mod tests {
     #[derive(Debug, Clone, Copy)]
     pub struct DummyError;
 
+    impl core::fmt::Display for DummyError {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "DummyError")
+        }
+    }
+
+    impl core::error::Error for DummyError {}
+
     impl Error for DummyError {
         fn kind(&self) -> ErrorKind {
             ErrorKind::Other

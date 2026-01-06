@@ -1,8 +1,8 @@
 [package]
 name = "sds011-nostd-rs"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Etienne Tremel <995474+etiennetremel@users.noreply.github.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 description = "An nostd async library to interact with the SDS011 sensor using UART protocol"
 homepage = "https://github.com/etiennetremel/sds011-nostd-rs"
@@ -12,7 +12,7 @@ categories = ["embedded", "no-std"]
 publish = true
 
 [dependencies]
-embedded-io-async = "0.6"
+embedded-io-async = "0.7"
 log = "0.4"
 
 [dev-dependencies]
